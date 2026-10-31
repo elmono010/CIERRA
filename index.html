@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CIERRA — Seguimiento de cotizaciones para técnicos</title>
+<meta name="description" content="CIERRA ayuda a técnicos independientes a no perder trabajos por olvido: cotizaciones, seguimiento al día 1, 3 y 7, PDF y recordatorio por WhatsApp. Tus datos quedan en tu dispositivo.">
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
+header{padding:24px 16px;background:#111827;border-bottom:3px solid #f59e0b}header h1{margin:0;font-size:28px}header p{margin:6px 0 0;color:#cbd5e1;max-width:760px}
+main{max-width:960px;margin:0 auto;padding:16px}.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;margin:12px 0}
+label{display:block;font-size:13px;margin:8px 0 4px;color:#cbd5e1}input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#fff}
+button{background:#f59e0b;color:#111827;border:0;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;margin:6px 6px 0 0}
+button.secondary{background:#334155;color:#fff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.stat{font-size:26px;font-weight:800}.small{font-size:13px;color:#94a3b8}.quote{border-top:1px solid #334155;padding:12px 0}.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#334155}.due{color:#fbbf24;font-weight:700}
+a{color:#fbbf24}
+@media print{body{background:#fff;color:#000}header,.card.no-print{display:none}.card{border:0;color:#000}}
+</style>
+</head>
+<body>
+<header>
+<h1>CIERRA</h1>
+<p>El seguimiento de cotizaciones para técnicos independientes. Si no haces seguimiento, el trabajo se lo lleva otro. Tus datos quedan en <strong>tu dispositivo</strong>, no en un servidor. Sin cuenta, sin suscripción para empezar.</p>
+<p class="small">Versión gratuita: hasta 5 cotizaciones activas. Pro desbloquea cotizaciones ilimitadas, historial completo y reportes. El pago Pro se coordina por mensaje privado, no se publican datos de pago en esta página.</p>
+</header>
+<main>
+<section class="card">
+<h2>Resumen</h2>
+<div class="grid">
+<div><div class="stat" id="sTotal">0</div><div class="small">Cotizaciones totales</div></div>
+<div><div class="stat" id="sPend">0</div><div class="small">Pendientes (valor)</div></div>
+<div><div class="stat" id="sClose">—</div><div class="small">Tasa de cierre</div></div>
+<div><div class="stat" id="sProfit">0</div><div class="small">Ganancia de trabajos cerrados</div></div>
+</div>
+<p class="small" id="sToday"></p>
+</section>
+
+<section class="card">
+<h2>Nueva cotización</h2>
+<form id="form">
+<div class="grid">
+<div><label>Cliente</label><input id="cliente" required placeholder="Ej: María Gómez"></div>
+<div><label>Teléfono del cliente (para WhatsApp, solo dígitos con código país)</label><input id="telefono" placeholder="Ej: 573001234567"></div>
+<div><label>Trabajo</label><input id="trabajo" required placeholder="Ej: Instalación de aire acondicionado"></div>
+<div><label>Precio cotizado</label><input id="precio" type="number" min="0" required></div>
+<div><label>Costo de materiales</label><input id="materiales" type="number" min="0" value="0"></div>
+<div><label>Fecha de la cotización</label><input id="fecha" type="date" required></div>
+</div>
+<label>Notas</label><textarea id="notas" rows="2"></textarea>
+<button type="submit">Guardar cotización</button>
+<p class="small" id="limitMsg"></p>
+</form>
+</section>
+
+<section class="card">
+<h2>Cotizaciones</h2>
+<div>
+<button class="secondary" onclick="setFilter('todas')">Todas</button>
+<button class="secondary" onclick="setFilter('pendiente')">Pendientes</button>
+<button class="secondary" onclick="setFilter('hoy')">Toca hoy</button>
+<button class="secondary" onclick="exportar()">Exportar respaldo JSON</button>
+<button class="secondary" onclick="document.getElementById('importFile').click()">Importar respaldo</button>
+<input type="file" id="importFile" accept=".json" hidden>
+</div>
+<div id="lista"></div>
+</section>
+
+<section class="card no-print">
+<h2>¿Cómo funciona el seguimiento?</h2>
+<p>Día 1, día 3 y día 7 después de la cotización, CIERRA te muestra qué toca hoy. Le das a “Seguimiento por WhatsApp” y se abre el mensaje listo para enviar. No enviamos nada por ti y no guardamos tus datos en ningún servidor.</p>
+<h3>Pro</h3>
+<p>Pro es para técnicos con más de 5 cotizaciones activas: ilimitadas, historial completo y reportes. Precio de lanzamiento: 6,99 USD al mes, 49 USD al año o 79 USD de por vida. Para activar Pro, escríbenos por mensaje privado desde la publicación oficial y te confirmamos el pago y tu código. No publiques ni compartas datos de pago en comentarios públicos.</p>
+</section>
+</main>
+<script>
+let quotes = JSON.parse(localStorage.getItem('cierra_quotes')||'[]');
+let filter='todas';
+const $=id=>document.getElementById(id);
+function save(){localStorage.setItem('cierra_quotes',JSON.stringify(quotes));render();}
+function money(n){return '$'+Number(n||0).toLocaleString('es-CO');}
+function followDates(d){const base=new Date(d+'T00:00:00');return [1,3,7].map(n=>{const x=new Date(base);x.setDate(x.getDate()+n);return x;});}
+function isDueToday(q){if(q.estado!=='pendiente')return false;const t=new Date();t.setHours(0,0,0,0);return followDates(q.fecha).some(x=>x.toDateString()===t.toDateString());}
+function render(){
+  const total=quotes.length, pend=quotes.filter(q=>q.estado==='pendiente');
+  const cerr=quotes.filter(q=>q.estado==='aceptada'), perd=quotes.filter(q=>q.estado==='perdida');
+  const decided=cerr.length+perd.length;
+  $('sTotal').textContent=total;
+  $('sPend').textContent=money(pend.reduce((a,q)=>a+Number(q.precio),0))+' ('+pend.length+')';
+  $('sClose').textContent=decided?Math.round(cerr.length/decided*100)+'%':'—';
+  $('sProfit').textContent=money(cerr.reduce((a,q)=>a+(Number(q.precio)-Number(q.materiales)),0));
+  const hoy=quotes.filter(isDueToday);
+  $('sToday').textContent=hoy.length?('Hoy toca seguimiento a: '+hoy.map(q=>q.cliente).join(', ')):'Hoy no hay seguimientos programados.';
+  $('limitMsg').textContent=pend.length>=5?'Límite gratuito alcanzado: 5 cotizaciones activas. Cierra o pierde alguna para seguir gratis, o activa Pro por mensaje privado.':'Cotizaciones activas gratuitas: '+pend.length+' de 5.';
+  let list=quotes.slice().reverse();
+  if(filter==='pendiente')list=list.filter(q=>q.estado==='pendiente');
+  if(filter==='hoy')list=list.filter(isDueToday);
+  $('lista').innerHTML=list.length?list.map(q=>{
+    const wa=q.telefono?`https://wa.me/${q.telefono.replace(/\D/g,'')}?text=${encodeURIComponent('Hola '+q.cliente+', te escribo por la cotización de '+q.trabajo+' por '+money(q.precio)+'. ¿Seguimos con el trabajo? — CIERRA')}`:'#';
+    return `<div class="quote"><strong>${q.cliente}</strong> <span class="badge">${q.estado}</span> ${isDueToday(q)?'<span class="due">· TOCA HOY</span>':''}<br>
+    ${q.trabajo} · ${money(q.precio)} · Ganancia estimada: ${money(Number(q.precio)-Number(q.materiales))} · ${q.fecha}<br>
+    <span class="small">${q.notas||''} ${q.motivo?'· Motivo pérdida: '+q.motivo:''}</span><br>
+    ${q.telefono?`<a href="${wa}" target="_blank" rel="noopener">Seguimiento por WhatsApp</a> · `:''}
+    <button class="secondary" onclick="cambiar(${q.id},'aceptada')">Marcar aceptada</button>
+    <button class="secondary" onclick="perder(${q.id})">Marcar perdida</button>
+    <button class="secondary" onclick="borrar(${q.id})">Borrar</button>
+    <button class="secondary" onclick="imprimir(${q.id})">Ver / imprimir PDF</button></div>`;
+  }).join(''):'<p class="small">Aún no hay cotizaciones. Crea la primera arriba.</p>';
+}
+function setFilter(f){filter=f;render();}
+function cambiar(id,estado){const q=quotes.find(x=>x.id===id);if(q){q.estado=estado;save();}}
+function perder(id){const m=prompt('Motivo de pérdida (ej: precio, compró en otro lado, sin respuesta):');const q=quotes.find(x=>x.id===id);if(q){q.estado='perdida';q.motivo=m||'';save();}}
+function borrar(id){if(confirm('¿Borrar esta cotización?')){quotes=quotes.filter(x=>x.id!==id);save();}}
+function imprimir(id){const q=quotes.find(x=>x.id===id);if(!q)return;const w=window.open('','_blank');w.document.write(`<h1>Cotización — CIERRA</h1><p>Cliente: ${q.cliente}</p><p>Trabajo: ${q.trabajo}</p><p>Precio: ${money(q.precio)}</p><p>Fecha: ${q.fecha}</p><p>Notas: ${q.notas||''}</p><p>Esta cotización es un documento generado en local por el técnico.</p>`);w.document.close();w.print();}
+function exportar(){const b=new Blob([JSON.stringify(quotes,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='cierra-respaldo.json';a.click();}
+$('importFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{quotes=JSON.parse(r.result);save();}catch{alert('Archivo no válido');}};r.readAsText(f);});
+$('form').addEventListener('submit',e=>{e.preventDefault();const pend=quotes.filter(q=>q.estado==='pendiente').length;if(pend>=5){alert('Límite gratuito: 5 cotizaciones activas. Marca alguna como aceptada o perdida, o activa Pro por mensaje privado.');return;}
+quotes.push({id:Date.now(),cliente:$('cliente').value.trim(),telefono:$('telefono').value.trim(),trabajo:$('trabajo').value.trim(),precio:$('precio').value,materiales:$('materiales').value||0,fecha:$('fecha').value,notas:$('notas').value.trim(),estado:'pendiente'});e.target.reset();save();});
+$('fecha').valueAsDate=new Date();
+render();
+</script>
+</body>
+</html>
